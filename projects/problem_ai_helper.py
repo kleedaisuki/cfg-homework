@@ -14,10 +14,11 @@ from IPython.display import display, Javascript
 import ipywidgets as widgets
 
 OLLAMA_HOST = "http://localhost:11434"
-# 默认使用免费的本地模型；可通过环境变量覆盖。 / Use a free local model by default; allow an environment override.
+# 默认使用可用的本地模型，并允许课程环境覆盖。 / Default to the local model and allow course-environment overrides.
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
 PROJECT_DIR = "projects"
 LOG_FILE = "cfg.log"
+FAST_MODE = os.environ.get("CFG_FAST_MODE", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 def read_file(filename):
     try:
@@ -63,7 +64,7 @@ def load_problems():
                 question_lines.append(line.strip())
             elif in_ref and line.strip():
                 ref_lines.append(line.strip())
-
+        
         if question_lines:
             problems[qid]["question"] = "\n".join(question_lines)
         if ref_lines:
@@ -147,6 +148,15 @@ def get_system_prompt(question_id, problems, policies):
     policy_text = general_policy
     if specific_policy:
         policy_text += "\n\n【本题特殊策略】\n" + specific_policy
+    fast_policy = """
+
+【Fast mode（最高优先级）】
+1. 不进行多轮苏格拉底式追问，也不要用反问代替解释。
+2. 学生直接问“CFG 是什么”或类似概念问题时，直接、简洁地解释。
+3. 学生答案基本正确时，只补充至多一个最关键遗漏，并让整条回复严格以 `[DONE]` 开头，随后立即结束本题。
+4. 学生答案错误或明显不完整时，只指出当前最关键的一处问题或给一个提示，允许学生重试；不要一次追问多个问题。
+5. `[DONE]` 前不得有空白、Markdown 标记或其他文字。
+""" if FAST_MODE else ""
     return f"""你是一个专业的编译原理课程助教，正在引导学生思考上下文无关文法相关的问题。
 
 【问题】
@@ -157,6 +167,7 @@ def get_system_prompt(question_id, problems, policies):
 
 【引导策略】
 {policy_text}
+{fast_policy}
 
 请开始引导学生思考。"""
 
@@ -167,6 +178,20 @@ def render_markdown(text):
         return md.convert(text)
     except:
         return text.replace("\n", "<br>")
+
+
+def is_direct_concept_question(message):
+    """Detect a short direct definition request. / 识别简短、直接的概念定义请求。"""
+    text = message.strip()
+    return len(text) <= 48 and bool(re.search(r"(是什么|什么是|定义|含义|什么意思)", text))
+
+
+def compact_done_reply(reply):
+    """Keep a completed answer to one paragraph. / 将完成回复压缩为一个段落。"""
+    stripped = reply.strip()
+    if not stripped.startswith("[DONE]"):
+        return reply
+    return stripped.split("\n\n", 1)[0].strip()
 
 class ThinkingAIChat:
     def __init__(self, question_id):
@@ -190,14 +215,14 @@ class ThinkingAIChat:
         .chat-widget-container {
             display: flex; flex-direction: column; height: 500px;
             border: 1px solid #e0e0e0; border-radius: 8px;
-            background-color: #fafafa; padding: 8px; overflow: hidden;
+            background-color: #fafafa; color: #1f2937; padding: 8px; overflow: hidden;
         }
         .chat-history-area {
             flex: 1; overflow-y: auto; margin-bottom: 8px; padding: 4px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6;
         }
-        .chat-history-area .user-msg { margin: 8px 0; padding: 8px 12px; background-color: #e3f2fd; border-radius: 8px; }
-        .chat-history-area .assistant-msg { margin: 8px 0; padding: 8px 12px; background-color: #f5f5f5; border-radius: 8px; }
+        .chat-history-area .user-msg { margin: 8px 0; padding: 8px 12px; background-color: #e3f2fd; color: #172554; border-radius: 8px; }
+        .chat-history-area .assistant-msg { margin: 8px 0; padding: 8px 12px; background-color: #f5f5f5; color: #1f2937; border-radius: 8px; }
         .chat-history-area .msg-label { font-weight: bold; font-size: 14px; }
         .chat-history-area .user-label { color: #1565C0; }
         .chat-history-area .assistant-label { color: #2E7D32; }
@@ -207,17 +232,25 @@ class ThinkingAIChat:
 
         self.chat_history = widgets.HTML(value="", layout=widgets.Layout(width='100%'))
         self.chat_history.add_class('chat-history-area')
-        self.input_box = widgets.Text(placeholder='输入你的回答...（按 Enter 发送）', layout=widgets.Layout(width='85%'))
+        self.completion_status = widgets.HTML(value="")
+        self.input_box = widgets.Text(
+            placeholder='输入你的回答...（按 Enter 发送）',
+            continuous_update=False,
+            layout=widgets.Layout(width='85%')
+        )
         self.send_button = widgets.Button(description='发送', button_style='primary', layout=widgets.Layout(width='12%'))
-
+        
         input_row = widgets.HBox([self.input_box, self.send_button])
         input_row.add_class('chat-input-area')
-
-        self.ui = widgets.VBox([self.css, self.chat_history, input_row], layout=widgets.Layout(width='100%'))
+        
+        self.ui = widgets.VBox(
+            [self.css, self.chat_history, self.completion_status, input_row],
+            layout=widgets.Layout(width='100%')
+        )
         self.ui.add_class('chat-widget-container')
 
         self.send_button.on_click(self.send_message)
-        self.input_box.on_submit(self.send_message)
+        self.input_box.observe(self._on_input_submitted, names='value')
 
         self.messages = []
         display(self.ui)
@@ -227,6 +260,23 @@ class ThinkingAIChat:
         self.messages.append(("assistant", initial_msg))
         self.update_chat_display()
         self.logger.log("【助教初始提问】", initial_msg)
+
+    def _on_input_submitted(self, change):
+        """Handle Enter submission without deprecated ``on_submit``. / 不使用已弃用的 ``on_submit`` 处理回车提交。"""
+        if change.get("name") == "value" and change.get("new", "").strip():
+            self.send_message(self.input_box)
+
+    def _mark_completed(self):
+        """Lock the controls after a real ``[DONE]`` reply. / 收到真实的 ``[DONE]`` 回复后锁定控件。"""
+        self.input_box.disabled = True
+        self.input_box.placeholder = "本题已完成"
+        self.send_button.disabled = True
+        self.send_button.description = "已完成"
+        self.send_button.button_style = "success"
+        self.completion_status.value = (
+            '<div style="padding:8px 12px;border-radius:6px;background:#dcfce7;'
+            'color:#14532d;font-weight:700;">✅ 本题已完成</div>'
+        )
 
     def update_chat_display(self):
         title = self.problems.get(self.question_id, {}).get("title", self.question_id)
@@ -248,6 +298,8 @@ class ThinkingAIChat:
         '''))
 
     def send_message(self, sender):
+        if self.input_box.disabled:
+            return
         text = self.input_box.value.strip()
         if not text: return
         self.input_box.value = ""
@@ -261,8 +313,18 @@ class ThinkingAIChat:
         for role, content in self.messages[:-1]:
             if role == "user": history_text += f"学生回答: {content}\n"
             else: history_text += f"助教: {content}\n"
-        full_prompt = self.system_prompt + f"\n\n【对话历史】\n{history_text}\n\n【学生最新回答】\n{message}\n\n请评价学生的回答，给出引导性的反馈。"
+        direct_question = FAST_MODE and is_direct_concept_question(message)
+        if direct_question:
+            full_prompt = f"""你是编译原理课程助教。学生直接询问：{message}
 
+请用一个简短段落直接解释该概念，不要反问、不要布置任务、不要追加问题。回复必须从第一个字符起以 `[DONE]` 开头。"""
+        else:
+            fast_instruction = (
+                "\n\n当前启用 fast mode。遵循最高优先级 fast mode 规则；满足结束条件时必须从第一个字符起输出 [DONE]。"
+                if FAST_MODE else ""
+            )
+            full_prompt = self.system_prompt + f"\n\n【对话历史】\n{history_text}\n\n【学生最新回答】\n{message}\n\n请评价学生的回答，给出引导性的反馈。" + fast_instruction
+        
         self.messages.append(("assistant", "正在思考..."))
         self.update_chat_display()
         full_reply = ""
@@ -270,9 +332,14 @@ class ThinkingAIChat:
             full_reply += chunk
             self.messages[-1] = ("assistant", full_reply + " ▌")
             self.update_chat_display()
+        if direct_question and not full_reply.strip().startswith("[DONE]"):
+            full_reply = "[DONE] " + full_reply.strip().split("\n\n", 1)[0]
+        full_reply = compact_done_reply(full_reply)
         self.messages[-1] = ("assistant", full_reply)
         self.update_chat_display()
         self.logger.log(f"【AI回复第{len(self.messages)}轮】", full_reply)
+        if full_reply.lstrip().startswith("[DONE]"):
+            self._mark_completed()
 
 if len(sys.argv) < 2:
     print("❌ 请指定思考题编号")
