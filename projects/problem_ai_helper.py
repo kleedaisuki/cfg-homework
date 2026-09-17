@@ -14,7 +14,8 @@ from IPython.display import display, Javascript
 import ipywidgets as widgets
 
 OLLAMA_HOST = "http://localhost:11434"
-OLLAMA_MODEL = "minimax-m3:cloud"
+# 默认使用免费的本地模型；可通过环境变量覆盖。 / Use a free local model by default; allow an environment override.
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:4b-instruct")
 PROJECT_DIR = "projects"
 LOG_FILE = "cfg.log"
 
@@ -93,7 +94,8 @@ def ask_ollama_stream(prompt):
             json={
                 "model": OLLAMA_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "stream": True
+                "stream": True,
+                "options": {"temperature": 0.4, "num_ctx": 8192},
             },
             timeout=120,
             stream=True
