@@ -2,7 +2,7 @@
 
 ## 1.3
 title: CFG的组成与闭包运算
-question:
+question: 
   1. 给定以下文法规则：
   expr -> expr + digit | expr - digit | digit
   digit -> 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
@@ -19,7 +19,7 @@ reference:
 
 ## 1.5
 title: CFG 设计练习 - C 语言 for 语句
-question:
+question: 
   请为像下面这样的 C 语言 for 语句设计对应的上下文无关文法（CFG）：
   for ( i = 1 ; i <= 100 ; i++ ) sum = sum + i ;
   提示：请回顾 1.4 节介绍的“CFG 的设计思想”，并参考前面 if 语句的示例，按如下思路思考：
@@ -36,7 +36,7 @@ reference:
 
 ## 1.6
 title: CFG 设计练习 - C 语言变量声明
-question:
+question: 
   在 C 语言中，变量声明可以是不同类型、可以包含任意多个标识符，例如：
   int a;
   float x, y, z;

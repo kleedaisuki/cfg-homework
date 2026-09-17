@@ -2,10 +2,10 @@
 
 ## 2.4
 title: 最左推导与语法树生成（含优先级与括号）
-aux_file:
+aux_file: 
 ex_file: student_derivation_2.4.txt
-compile_log:
-run_log:
+compile_log: 
+run_log: 
 task_desc:
   学生被要求写出句子 7-3*(4+6) 的最左推导过程。
   文法为：expr -> expr + term | expr - term | term ; term -> term * factor | term / factor | factor ; factor -> digit | ( expr ) ; digit -> 0..9
@@ -17,10 +17,10 @@ reference:
 
 ## 2.5
 title: 后缀表达式文法的推导与语法树
-aux_file:
+aux_file: 
 ex_file: student_derivation_2.5.txt
-compile_log:
-run_log:
+compile_log: 
+run_log: 
 task_desc:
   学生被要求写出句子 aa+a* 的最左推导过程。
   文法为：S -> S S + | S S * | a

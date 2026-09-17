@@ -15,7 +15,7 @@ def tokenize(s):
 
 def validate_and_draw(derivation_steps, non_terminals, target_sentence, root_label, log_filename, log_append_text=""):
     os.makedirs("projects", exist_ok=True)
-
+    
     # 准备日志内容列表，用于收集所有输出
     log_lines = []
     def log_print(*args):
@@ -29,7 +29,7 @@ def validate_and_draw(derivation_steps, non_terminals, target_sentence, root_lab
         f.write(cfg_text)
 
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    
     # 初始日志记录
     log_lines.append("\n#################### 事件分隔 ####################")
     log_lines.append(f"=== [{timestamp}] {log_append_text} ===")
@@ -48,33 +48,33 @@ def validate_and_draw(derivation_steps, non_terminals, target_sentence, root_lab
             log_print(f"❌ 格式错误: '{step}'。每一行必须包含 '=>'。")
             valid = False
             break
-
+            
         next_str = step.split("=>", 1)[1].strip()
         next_tokens = tokenize(next_str)
         curr_tokens = [n.label for n in frontier]
-
+        
         L_idx = -1
         for i, token in enumerate(curr_tokens):
             if token in non_terminals:
                 L_idx = i
                 break
-
+                
         if L_idx == -1:
             log_print(f"❌ 错误: 当前串中已没有非终结符，但仍未推导出目标句子。")
             log_print(f"   当前串: {' '.join(curr_tokens)}")
             valid = False
             break
-
+            
         expected_prefix = curr_tokens[:L_idx]
         expected_suffix = curr_tokens[L_idx+1:]
-
+        
         if next_tokens[:L_idx] != expected_prefix:
             log_print(f"❌ 错误: 不是最左推导或替换错误。你不应修改最左非终结符之前的部分。")
             log_print(f"   当前串: {' '.join(curr_tokens)}")
             log_print(f"   你的步骤: {' '.join(next_tokens)}")
             valid = False
             break
-
+            
         if len(expected_suffix) > 0:
             if next_tokens[-len(expected_suffix):] != expected_suffix:
                 log_print(f"❌ 错误: 不是最左推导或替换错误。你不应修改最左非终结符之后的部分。")
@@ -85,7 +85,7 @@ def validate_and_draw(derivation_steps, non_terminals, target_sentence, root_lab
             new_rhs = next_tokens[L_idx:-len(expected_suffix)]
         else:
             new_rhs = next_tokens[L_idx:]
-
+            
         if not new_rhs:
             log_print(f"❌ 错误: 替换后的内容为空。")
             valid = False
@@ -101,21 +101,21 @@ def validate_and_draw(derivation_steps, non_terminals, target_sentence, root_lab
         if final_str == target_sentence:
             log_print("✅ 推导正确！最终生成句子: " + final_str)
             log_print("📊 正在生成语法树...\n")
-
+            
             def print_tree(node, prefix="", is_last=True, is_root=True):
                 if is_root:
                     log_print(node.label)
                 else:
                     log_print(f"{prefix}{'└── ' if is_last else '├── '}{node.label}")
-
+                
                 if not node.children:
                     return
-
+                    
                 for i, child in enumerate(node.children):
                     child_is_last = (i == len(node.children) - 1)
                     child_prefix = "" if is_root else prefix + ("    " if is_last else "│   ")
                     print_tree(child, child_prefix, child_is_last, False)
-
+            
             print_tree(root)
         else:
             log_print(f"❌ 推导完成但结果不匹配。当前结果: '{final_str}', 目标: '{target_sentence}'")
