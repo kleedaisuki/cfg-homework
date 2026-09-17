@@ -1,0 +1,11 @@
+[project]
+name = "cfg-homework"
+version = "0.1.0"
+requires-python = ">=3.15"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "ipython>=9.17.1",
+    "ipywidgets>=8.1.9",
+    "markdown>=3.10.3",
+    "requests>=2.34.2",
+]
